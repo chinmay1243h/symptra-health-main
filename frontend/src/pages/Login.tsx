@@ -11,7 +11,7 @@ import { toast } from 'sonner';
 const Login = () => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const { login, isLoading: authContextLoading, user } = useAuth(); // Get user and authContextLoading
+  const { login, isLoading: authContextLoading, user } = useAuth();
   const navigate = useNavigate();
 
   const isMounted = useRef(true);
@@ -33,29 +33,25 @@ const Login = () => {
       if (isMounted.current) {
         if (user.role === 'admin') {
           // If admin, redirect to admin dashboard
-          // Ensure adminSession is set for AdminDashboard.tsx to use
           localStorage.setItem('adminSession', JSON.stringify({
             isAdmin: true,
             email: user.email,
             timestamp: new Date().getTime()
           }));
           navigate('/admin/dashboard', { replace: true });
-        } else {
-          // For regular users, redirect to profile
-          navigate('/profile', { replace: true });
+        } else if (user.role === 'user') {
+          // For regular users, redirect to general dashboard
+          navigate('/dashboard', { replace: true }); // CHANGED FROM /profile TO /dashboard
         }
       }
     }
-  }, [user, navigate, authContextLoading]); // Depend on user, navigate, and authContextLoading
+  }, [user, navigate, authContextLoading]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!isMounted.current) return;
 
-    // Call AuthContext's login function. It returns true/false for success.
-    // Redirection is handled by the useEffect above, which reacts to `user` state changes.
-    await login(email, password); 
-    // No explicit navigation here, as useEffect will handle it based on user role.
+    await login(email, password);
   };
 
   return (

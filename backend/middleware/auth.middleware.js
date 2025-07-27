@@ -1,47 +1,40 @@
-
 const jwt = require('jsonwebtoken');
 const User = require('../models/user.model');
 
-// Authentication middleware
 exports.authenticate = async (req, res, next) => {
+  let token;
+
+  // Check for token in cookies
+  if (req.cookies.token) {
+    token = req.cookies.token;
+  }
+
+  // If no token, return unauthorized
+  if (!token) {
+    return res.status(401).json({ success: false, message: 'Not authorized to access this route (no token)' });
+  }
+
   try {
-    const token = req.header('Authorization')?.replace('Bearer ', '');
-    
-    if (!token) {
-      return res.status(401).json({ 
-        success: false, 
-        message: 'Authentication required' 
-      });
-    }
-
+    // Verify token
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    const user = await User.findById(decoded.id).select('-password');
-    
-    if (!user) {
-      return res.status(401).json({ 
-        success: false, 
-        message: 'User not found' 
-      });
-    }
 
-    req.user = user;
+    // Attach user to the request object
+    req.user = await User.findById(decoded.id);
+
+    if (!req.user) {
+        return res.status(401).json({ success: false, message: 'Not authorized, user not found' });
+    }
     next();
   } catch (error) {
-    return res.status(401).json({ 
-      success: false, 
-      message: 'Invalid token' 
-    });
+    console.error('Authentication error:', error);
+    return res.status(401).json({ success: false, message: 'Not authorized to access this route (token failed)' });
   }
 };
 
-// Admin authorization middleware
 exports.isAdmin = (req, res, next) => {
   if (req.user && req.user.role === 'admin') {
     next();
   } else {
-    res.status(403).json({ 
-      success: false, 
-      message: 'Admin access required' 
-    });
+    res.status(403).json({ success: false, message: 'Forbidden: Admin access required' });
   }
 };

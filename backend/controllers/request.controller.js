@@ -155,10 +155,17 @@ exports.bulkProcessRequests = async (req, res, next) => {
 exports.getUserRequests = async (req, res, next) => {
     try {
         if (!req.user || !req.user.id) {
+            console.log('DEBUG: getUserRequests - Not authenticated (req.user missing)'); // ADD THIS
             return res.status(401).json({ success: false, message: 'Not authenticated' });
         }
+        console.log('DEBUG: getUserRequests - User ID:', req.user.id); // ADD THIS
+
         // Find requests where submittedBy matches the logged-in user's ID
         const requests = await populateRequestFields(Request.find({ submittedBy: req.user.id }));
+        
+        console.log('DEBUG: getUserRequests - Found requests:', requests.length); // ADD THIS
+        // console.log('DEBUG: getUserRequests - Full requests data:', requests); // UNCOMMENT FOR MORE DETAIL IF NEEDED
+
         res.status(200).json({ success: true, count: requests.length, data: requests });
     } catch (error) {
         console.error('Error getting user requests:', error);

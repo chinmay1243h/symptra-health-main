@@ -9,28 +9,28 @@ import {
   Package, 
   FileText, 
   AlertTriangle,
-  RefreshCcw
+  RefreshCcw,
+  ShoppingCart // Import ShoppingCart for Orders tab
 } from 'lucide-react';
 import { toast } from 'sonner';
 import AdminUsersList from '@/components/admin/AdminUsersList';
 import AdminProductsList from '@/components/admin/AdminProductsList';
 import AdminArticlesList from '@/components/admin/AdminArticlesList';
 import AdminRequestsList from '@/components/admin/AdminRequestsList';
-import { useAuth } from '@/context/AuthContext'; // Import useAuth
+import AdminOrdersList from '@/components/admin/AdminOrderList'; // IMPORT THIS
+import { useAuth } from '@/context/AuthContext';
 
 const AdminDashboard = () => {
   const navigate = useNavigate();
-  const { user, isLoading: authLoading, logout } = useAuth(); // Get user, authLoading, and logout from AuthContext
+  const { user, isLoading: authLoading, logout } = useAuth();
   const [isAdmin, setIsAdmin] = useState(false);
-  const [loadingContent, setLoadingContent] = useState(true); // Loading state for dashboard content
+  const [loadingContent, setLoadingContent] = useState(true);
 
   useEffect(() => {
-    // Check authentication status once AuthContext has finished loading
     if (!authLoading) {
       if (user && user.role === 'admin') {
         setIsAdmin(true);
-        setLoadingContent(false); // Content can load now
-        // Ensure adminSession is set if it's a valid admin login but session wasn't explicitly set
+        setLoadingContent(false);
         if (!localStorage.getItem('adminSession')) {
           localStorage.setItem('adminSession', JSON.stringify({
             isAdmin: true,
@@ -39,24 +39,21 @@ const AdminDashboard = () => {
           }));
         }
       } else {
-        // If not authenticated or not an admin, redirect to admin login
         toast.error('Admin login required or session expired.');
-        // Clear any lingering adminSession or token if it's invalid
         localStorage.removeItem('adminSession');
-        localStorage.removeItem('token'); // Clear main token too if not admin
-        navigate('/admin/login', { replace: true }); // Use replace to prevent history stack issues
+        localStorage.removeItem('token');
+        navigate('/admin/login', { replace: true });
       }
     }
-  }, [user, authLoading, navigate, logout]); // Rerun when user or authLoading changes, include logout in deps
+  }, [user, authLoading, navigate, logout]);
 
   const handleLogout = () => {
-    logout(); // Use AuthContext's logout
-    localStorage.removeItem('adminSession'); // Also clear admin specific session
+    logout();
+    localStorage.removeItem('adminSession');
     toast.success('Admin logged out');
-    navigate('/admin/login', { replace: true }); // Redirect to admin login after logout
+    navigate('/admin/login', { replace: true });
   };
 
-  // Show a global loading indicator while AuthContext is determining user status
   if (authLoading || loadingContent) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -68,9 +65,8 @@ const AdminDashboard = () => {
     );
   }
 
-  // If not admin after loading, it means the useEffect already handled redirection
   if (!isAdmin) {
-    return null; // Should ideally not be reached due to navigate in useEffect
+    return null;
   }
 
   return (
@@ -98,7 +94,7 @@ const AdminDashboard = () => {
       
       <main className="container mx-auto px-4 py-8">
         <Tabs defaultValue="users" className="w-full">
-          <TabsList className="grid grid-cols-4 mb-8">
+          <TabsList className="grid grid-cols-5 mb-8"> {/* Changed to grid-cols-5 */}
             <TabsTrigger value="users" className="flex items-center justify-center">
               <Users className="h-4 w-4 mr-2" />
               Users
@@ -114,6 +110,10 @@ const AdminDashboard = () => {
             <TabsTrigger value="requests" className="flex items-center justify-center">
               <AlertTriangle className="h-4 w-4 mr-2" />
               Requests
+            </TabsTrigger>
+            <TabsTrigger value="orders" className="flex items-center justify-center"> {/* ADD THIS TAB */}
+              <ShoppingCart className="h-4 w-4 mr-2" />
+              Orders
             </TabsTrigger>
           </TabsList>
           
@@ -131,6 +131,10 @@ const AdminDashboard = () => {
           
           <TabsContent value="requests">
             <AdminRequestsList />
+          </TabsContent>
+          
+          <TabsContent value="orders"> {/* ADD THIS CONTENT */}
+            <AdminOrdersList />
           </TabsContent>
         </Tabs>
       </main>

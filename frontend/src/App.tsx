@@ -1,67 +1,101 @@
+import { useState, useEffect } from 'react';
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { AuthProvider, useAuth } from './context/AuthContext';
+import { CartProvider } from './context/cartContext';
+import { Toaster } from './components/ui/sonner';
+import AdminDashboard from './pages/AdminDashboard';
+import AdminLogin from './pages/AdminLogin';
+import Login from './pages/Login';
+import Signup from './pages/Signup';
+import UserProfile from './pages/UserProfile';
+import Records from './pages/Records';
+import AIAssistant from './pages/AIAssistant';
+import DiseaseDiagnosis from './pages/DiseaseDiagnosis';
+import Hospitals from './pages/Hospitals';
+import Index from './pages/Index';
+import HelpCenter from './pages/HelpCenter';
+import ContactUs from './pages/ContactUs';
+import FAQs from './pages/FAQs';
+import TermsOfService from './pages/TermsOfService';
+import PrivacyPolicy from './pages/PrivacyPolicy';
+import NotFound from './pages/NotFound';
+import Dashboard from './pages/Dashboard';
+import MentalHealth from './pages/MentalHealth';
+import Products from './pages/Products';
+import Articles from './pages/Articles';
+import ArticleDetail from './pages/ArticleDetail';
+import CartPage from './pages/CartPage';
+import CheckoutPage from './pages/CheckoutPage'; // IMPORT THIS
+import OrderConfirmationPage from './pages/orderConfirmation'; // IMPORT THIS
+import { Loader2 } from 'lucide-react';
 
-import { Toaster } from "@/components/ui/toaster";
-import { Toaster as Sonner } from "@/components/ui/sonner";
-import { TooltipProvider } from "@/components/ui/tooltip";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Routes, Route } from "react-router-dom";
-import { AuthProvider } from "./context/AuthContext";
-import Index from "./pages/Index";
-import NotFound from "./pages/NotFound";
-import Dashboard from "./pages/Dashboard";
-import Diagnosis from "./pages/Diagnosis";
-import DiseaseDiagnosis from "./pages/DiseaseDiagnosis";
-import MentalHealth from "./pages/MentalHealth";
-import Hospitals from "./pages/Hospitals";
-import Records from "./pages/Records";
-import AIAssistant from "./pages/AIAssistant";
-import Login from "./pages/Login";
-import Signup from "./pages/Signup";
-import HelpCenter from "./pages/HelpCenter";
-import PrivacyPolicy from "./pages/PrivacyPolicy";
-import TermsOfService from "./pages/TermsOfService";
-import FAQs from "./pages/FAQs";
-import ContactUs from "./pages/ContactUs";
-import UserProfile from "./pages/UserProfile";
-import AdminLogin from "./pages/AdminLogin";
-import AdminDashboard from "./pages/AdminDashboard";
+// PrivateRoute component to protect routes
+const PrivateRoute = ({ children, roles }: { children: JSX.Element; roles?: string[] }) => {
+  const { user, isLoading } = useAuth();
 
-const queryClient = new QueryClient();
+  if (isLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin text-healthcare-primary" />
+        <p className="ml-3 text-lg">Loading...</p>
+      </div>
+    );
+  }
 
-const App = () => (
-  <QueryClientProvider client={queryClient}>
-    <TooltipProvider>
-      <Toaster />
-      <Sonner />
-      <BrowserRouter>
+  if (!user) {
+    return <Navigate to="/login" replace />;
+  }
+
+  if (roles && !roles.includes(user.role)) {
+    return <Navigate to="/" replace />;
+  }
+
+  return children;
+};
+
+function App() {
+  return (
+    <BrowserRouter>
+      <CartProvider>
         <AuthProvider>
           <Routes>
+            {/* Public Routes */}
             <Route path="/" element={<Index />} />
             <Route path="/login" element={<Login />} />
             <Route path="/signup" element={<Signup />} />
-            <Route path="/dashboard" element={<Dashboard />} />
-            <Route path="/diagnosis" element={<Diagnosis />} />
-            <Route path="/disease-diagnosis" element={<DiseaseDiagnosis />} />
-            <Route path="/mental-health" element={<MentalHealth />} />
-            <Route path="/hospitals" element={<Hospitals />} />
-            <Route path="/records" element={<Records />} />
-            <Route path="/ai-assistant" element={<AIAssistant />} />
-            <Route path="/help-center" element={<HelpCenter />} />
-            <Route path="/privacy-policy" element={<PrivacyPolicy />} />
-            <Route path="/terms-of-service" element={<TermsOfService />} />
-            <Route path="/faqs" element={<FAQs />} />
-            <Route path="/contact-us" element={<ContactUs />} />
-            <Route path="/profile" element={<UserProfile />} />
-            
-            {/* Admin routes */}
             <Route path="/admin/login" element={<AdminLogin />} />
-            <Route path="/admin/dashboard" element={<AdminDashboard />} />
-            
+            <Route path="/hospitals" element={<Hospitals />} />
+            <Route path="/ai-assistant" element={<AIAssistant />} />
+            <Route path="/diagnosis" element={<DiseaseDiagnosis />} />
+            <Route path="/mental-health" element={<MentalHealth />} />
+            <Route path="/help-center" element={<HelpCenter />} />
+            <Route path="/contact-us" element={<ContactUs />} />
+            <Route path="/faqs" element={<FAQs />} />
+            <Route path="/terms-of-service" element={<TermsOfService />} />
+            <Route path="/privacy-policy" element={<PrivacyPolicy />} />
+            <Route path="/products" element={<Products />} />
+            <Route path="/articles" element={<Articles />} />
+            <Route path="/articles/:id" element={<ArticleDetail />} />
+            <Route path="/cart" element={<CartPage />} />
+
+            {/* Private Routes (User) */}
+            <Route path="/dashboard" element={<PrivateRoute><Dashboard /></PrivateRoute>} />
+            <Route path="/profile" element={<PrivateRoute><UserProfile /></PrivateRoute>} />
+            <Route path="/records" element={<PrivateRoute><Records /></PrivateRoute>} />
+            <Route path="/checkout" element={<PrivateRoute><CheckoutPage /></PrivateRoute>} /> {/* ADD THIS ROUTE */}
+            <Route path="/order-confirmation/:id" element={<PrivateRoute><OrderConfirmationPage /></PrivateRoute>} /> {/* ADD THIS ROUTE */}
+
+            {/* Admin Private Routes */}
+            <Route path="/admin/dashboard" element={<PrivateRoute roles={['admin']}><AdminDashboard /></PrivateRoute>} />
+
+            {/* 404 Not Found */}
             <Route path="*" element={<NotFound />} />
           </Routes>
+          <Toaster />
         </AuthProvider>
-      </BrowserRouter>
-    </TooltipProvider>
-  </QueryClientProvider>
-);
+      </CartProvider>
+    </BrowserRouter>
+  );
+}
 
 export default App;

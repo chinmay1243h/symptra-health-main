@@ -1,20 +1,24 @@
-
 import { useState } from "react";
 import { format } from "date-fns";
+import { Calendar as CalendarIcon, Link } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Calendar } from "@/components/ui/calendar";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
-import { CalendarCheck } from "lucide-react";
-import { Calendar } from "@/components/ui/calendar";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
+import { useAuth } from "@/context/AuthContext"; // Import useAuth
 
-const doctorSpecialties = [
-  { id: "general", name: "General Consultation" },
-  { id: "mental", name: "Mental Health Support" },
-  { id: "diagnosis", name: "Medical Diagnosis" },
-  { id: "specialist", name: "Specialist Referral" }
+// Define the base URL for your backend API
+const API_BASE_URL = 'http://localhost:5000/api';
+
+const serviceOptions = [
+  { id: "general_checkup", name: "General Checkup" },
+  { id: "mental_health_consult", name: "Mental Health Consultation" },
+  { id: "disease_diagnosis", name: "Disease Diagnosis" },
+  { id: "medical_report_analysis", name: "Medical Report Analysis" },
+  { id: "specialist_referral", name: "Specialist Referral" },
 ];
 
 const timeSlots = [
@@ -23,163 +27,175 @@ const timeSlots = [
 ];
 
 const BookingForm = () => {
-  const [name, setName] = useState("");
-  const [email, setEmail] = useState("");
-  const [phone, setPhone] = useState("");
-  const [service, setService] = useState("");
-  const [date, setDate] = useState<Date>();
+  const { user, getToken } = useAuth(); // Get current user and getToken
+  const [name, setName] = useState(user?.name || ''); // Pre-fill name if logged in
+  const [email, setEmail] = useState(user?.email || ''); // Pre-fill email if logged in
+  const [phone, setPhone] = useState('');
+  const [serviceNeeded, setServiceNeeded] = useState("");
+  const [appointmentDate, setAppointmentDate] = useState<Date | undefined>(new Date());
   const [timeSlot, setTimeSlot] = useState("");
-  const [loading, setLoading] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setLoading(true);
-    
-    if (!date || !service || !timeSlot || !name || !email || !phone) {
-      toast.error("Please fill out all required fields");
-      setLoading(false);
+    setIsLoading(true);
+
+    if (!name || !email || !phone || !serviceNeeded || !appointmentDate || !timeSlot) {
+      toast.error("Please fill out all fields for the consultation.");
+      setIsLoading(false);
       return;
     }
-    
-    // Simulate API call
-    setTimeout(() => {
-      toast.success("Appointment booked successfully!", {
-        description: `Your appointment is scheduled for ${format(date, "PPP")} at ${timeSlot}`
+
+    const token = getToken(); // Get token for authenticated request (optional for public forms, but good practice if user might be logged in)
+
+    try {
+      const formattedDate = appointmentDate.toISOString();
+
+      const response = await fetch(`${API_BASE_URL}/requests`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          // Include Authorization header if user is logged in, otherwise it's a public request
+          ...(token && { 'Authorization': `Bearer ${token}` }), 
+        },
+        body: JSON.stringify({
+          type: 'free_consultation', // New type for this request
+          data: {
+            fullName: name,
+            email: email,
+            phoneNumber: phone,
+            service: serviceNeeded,
+            appointmentDate: formattedDate,
+            appointmentTime: timeSlot,
+          },
+        }),
       });
-      setName("");
-      setEmail("");
-      setPhone("");
-      setService("");
-      setDate(undefined);
-      setTimeSlot("");
-      setLoading(false);
-    }, 1000);
+
+      const responseData = await response.json();
+
+      if (response.ok && responseData.success) {
+        toast.success("Free consultation booked successfully!", {
+          description: `${format(appointmentDate, "PPP")} at ${timeSlot}`
+        });
+        // Reset form fields after successful submission
+        setName(user?.name || ''); // Reset to user's name or empty
+        setEmail(user?.email || ''); // Reset to user's email or empty
+        setPhone('');
+        setServiceNeeded("");
+        setAppointmentDate(new Date());
+        setTimeSlot("");
+      } else {
+        toast.error(responseData.message || "Failed to book consultation.");
+      }
+    } catch (error) {
+      console.error("Error booking consultation:", error);
+      toast.error("An error occurred while booking the consultation.");
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (
-    <div className="bg-white rounded-xl shadow-lg overflow-hidden">
-      <div className="bg-healthcare-primary/10 p-4 flex items-center">
-        <CalendarCheck className="h-5 w-5 text-healthcare-primary mr-2" />
-        <h3 className="text-lg font-medium text-healthcare-dark">Book a Free Consultation</h3>
-      </div>
-      <form onSubmit={handleSubmit} className="p-6 space-y-4">
-        <div className="space-y-2">
-          <label htmlFor="name" className="text-sm font-medium text-gray-700">Your Name</label>
-          <Input 
-            id="name"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            placeholder="John Doe"
-            required
-            className="w-full"
-          />
-        </div>
-        
+    <div className="bg-white p-6 rounded-lg shadow-lg">
+      <h3 className="text-xl font-bold text-healthcare-dark mb-4">Book a Free Consultation</h3>
+      <form onSubmit={handleSubmit} className="space-y-4">
+        <Input 
+          placeholder="Your Name" 
+          value={name} 
+          onChange={(e) => setName(e.target.value)} 
+          required 
+          readOnly={!!user} // Make read-only if user is logged in and name is pre-filled
+          className={cn(!!user && "bg-gray-100 cursor-not-allowed")}
+        />
+        <Input 
+          type="email" 
+          placeholder="Email Address" 
+          value={email} 
+          onChange={(e) => setEmail(e.target.value)} 
+          required 
+          readOnly={!!user} // Make read-only if user is logged in and email is pre-filled
+          className={cn(!!user && "bg-gray-100 cursor-not-allowed")}
+        />
+        <Input 
+          type="tel" 
+          placeholder="Phone Number" 
+          value={phone} 
+          onChange={(e) => setPhone(e.target.value)} 
+          required 
+        />
+        <Select value={serviceNeeded} onValueChange={setServiceNeeded} required>
+          <SelectTrigger>
+            <SelectValue placeholder="Service Needed" />
+          </SelectTrigger>
+          <SelectContent>
+            {serviceOptions.map((service) => (
+              <SelectItem key={service.id} value={service.id}>
+                {service.name}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div className="space-y-2">
-            <label htmlFor="email" className="text-sm font-medium text-gray-700">Email Address</label>
-            <Input 
-              id="email"
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              placeholder="you@example.com"
-              required
-              className="w-full"
-            />
-          </div>
-          
-          <div className="space-y-2">
-            <label htmlFor="phone" className="text-sm font-medium text-gray-700">Phone Number</label>
-            <Input 
-              id="phone"
-              type="tel"
-              value={phone}
-              onChange={(e) => setPhone(e.target.value)}
-              placeholder="(123) 456-7890"
-              required
-              className="w-full"
-            />
-          </div>
-        </div>
-        
-        <div className="space-y-2">
-          <label htmlFor="service" className="text-sm font-medium text-gray-700">Service Needed</label>
-          <Select value={service} onValueChange={setService} required>
+          <Popover>
+            <PopoverTrigger asChild>
+              <Button
+                variant="outline"
+                className={cn(
+                  "w-full justify-start text-left font-normal",
+                  !appointmentDate && "text-muted-foreground"
+                )}
+              >
+                <CalendarIcon className="mr-2 h-4 w-4" />
+                {appointmentDate ? format(appointmentDate, "PPP") : <span>Appointment Date</span>}
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-auto p-0" align="start">
+              <Calendar
+                mode="single"
+                selected={appointmentDate}
+                onSelect={setAppointmentDate}
+                initialFocus
+                disabled={(date) => date < new Date()}
+              />
+            </PopoverContent>
+          </Popover>
+          <Select value={timeSlot} onValueChange={setTimeSlot} required>
             <SelectTrigger>
-              <SelectValue placeholder="Select a service" />
+              <SelectValue placeholder="Time Slot" />
             </SelectTrigger>
             <SelectContent>
-              {doctorSpecialties.map((specialty) => (
-                <SelectItem key={specialty.id} value={specialty.id}>
-                  {specialty.name}
+              {timeSlots.map((time) => (
+                <SelectItem key={time} value={time}>
+                  {time}
                 </SelectItem>
               ))}
             </SelectContent>
           </Select>
         </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div className="space-y-2">
-            <label className="text-sm font-medium text-gray-700">Appointment Date</label>
-            <Popover>
-              <PopoverTrigger asChild>
-                <Button
-                  variant="outline"
-                  className={cn(
-                    "w-full justify-start text-left font-normal",
-                    !date && "text-muted-foreground"
-                  )}
-                >
-                  <CalendarCheck className="mr-2 h-4 w-4" />
-                  {date ? format(date, "PPP") : <span>Select date</span>}
-                </Button>
-              </PopoverTrigger>
-              <PopoverContent className="w-auto p-0" align="start">
-                <Calendar
-                  mode="single"
-                  selected={date}
-                  onSelect={setDate}
-                  initialFocus
-                  disabled={(date) => date < new Date()}
-                  className={cn("p-3 pointer-events-auto")}
-                />
-              </PopoverContent>
-            </Popover>
-          </div>
-          
-          <div className="space-y-2">
-            <label className="text-sm font-medium text-gray-700">Time Slot</label>
-            <Select value={timeSlot} onValueChange={setTimeSlot}>
-              <SelectTrigger>
-                <SelectValue placeholder="Select time" />
-              </SelectTrigger>
-              <SelectContent>
-                {timeSlots.map((time) => (
-                  <SelectItem key={time} value={time}>
-                    {time}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-        </div>
-        
-        <div className="pt-2">
-          <Button 
-            type="submit" 
-            className="w-full bg-healthcare-primary hover:bg-healthcare-primary/90"
-            disabled={loading}
-          >
-            {loading ? "Submitting..." : "Book Appointment"}
-          </Button>
-        </div>
-        
-        <p className="text-xs text-gray-500 text-center mt-4">
-          By submitting this form, you agree to our 
-          <a href="#" className="text-healthcare-primary hover:underline"> Terms of Service </a> 
-          and 
-          <a href="#" className="text-healthcare-primary hover:underline"> Privacy Policy</a>.
+        <Button 
+          type="submit" 
+          className="w-full bg-healthcare-primary hover:bg-healthcare-primary/90"
+          disabled={isLoading}
+        >
+          {isLoading ? (
+            <span className="flex items-center justify-center">
+              <span className="mr-2">Booking</span>
+              <span className="animate-spin">•</span>
+            </span>
+          ) : (
+            "Book Appointment"
+          )}
+        </Button>
+        <p className="text-xs text-gray-500 mt-2">
+          By submitting this form, you agree to our{" "}
+          <Link to="/terms-of-service" className="underline hover:text-healthcare-primary">
+            Terms of Service
+          </Link>{" "}
+          and{" "}
+          <Link to="/privacy-policy" className="underline hover:text-healthcare-primary">
+            Privacy Policy
+          </Link>
+          .
         </p>
       </form>
     </div>
@@ -187,3 +203,4 @@ const BookingForm = () => {
 };
 
 export default BookingForm;
+

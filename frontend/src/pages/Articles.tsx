@@ -25,7 +25,7 @@ const Navigation = () => {
     { name: "Mental Health", href: "/mental-health" },
     { name: "Hospitals", href: "/hospitals" },
     { name: "Products", href: "/products" },
-    // { name: "Articles", href: "/articles" },
+    { name: "Articles", href: "/articles" },
     { name: "Records", href: "/records" },
     { name: "AI Assistant", href: "/ai-assistant" },
     { name: "Help Center", href: "/help-center" },

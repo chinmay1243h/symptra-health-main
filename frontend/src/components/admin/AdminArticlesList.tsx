@@ -19,7 +19,8 @@ import {
   XIcon,
   ThumbsUpIcon,
   ThumbsDownIcon,
-  RefreshCw
+  RefreshCw,
+  Send // Import Send icon for submit button
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { 
@@ -36,16 +37,14 @@ const API_BASE_URL = 'http://localhost:5000/api';
 
 type ArticleStatus = 'draft' | 'pending' | 'published' | 'rejected';
 
-// Updated Article type to correctly reflect populated author object
 type Article = {
   id: string;
   title: string;
   content: string;
-  // Author is an object with _id, name, email as populated by backend
   author: {
-    _id: string;
-    name: string;
-    email: string;
+    _id?: string;
+    name?: string;
+    email?: string;
   };
   status: ArticleStatus;
   category: string;
@@ -61,42 +60,42 @@ const AdminArticlesList = () => {
     id: '',
     title: '',
     content: '',
-    // Initialize author as an empty object with required properties
-    author: { _id: '', name: '', email: '' }, 
+    author: { _id: '', name: '', email: '' },
     status: 'draft',
     category: '',
     tags: []
   });
-  const { getToken, user: currentUser } = useAuth(); // Get getToken and current user
+  const { getToken, user: currentUser } = useAuth();
 
   const fetchArticles = async () => {
     setLoading(true);
     try {
-      const token = getToken();
-      if (!token) {
-        toast.error('Authentication token not found. Please log in as admin.');
-        setLoading(false);
-        return;
-      }
-
       const response = await fetch(`${API_BASE_URL}/articles/admin/all`, {
         method: 'GET',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`,
         },
+        credentials: 'include',
       });
+
+      if (!response.ok) {
+        toast.error('Session expired or not authorized. Please log in again.');
+        setLoading(false);
+        return;
+      }
 
       const data = await response.json();
 
-      if (response.ok && data.success) {
+      if (data.success) {
         const fetchedArticles: Article[] = data.data.map((a: any) => ({
           id: a._id,
           title: a.title,
           content: a.content,
-          // Ensure author is always an object, even if backend returns null/undefined for some reason
-          // This handles cases where author might not be populated or is missing
-          author: a.author || { _id: '', name: 'Unknown', email: 'unknown@example.com' }, 
+          author: a.author ? { 
+            _id: a.author._id || '', 
+            name: a.author.name || 'Unknown', 
+            email: a.author.email || 'unknown@example.com' 
+          } : { _id: '', name: 'Unknown', email: 'unknown@example.com' }, 
           status: a.status,
           category: a.category,
           tags: a.tags,
@@ -115,14 +114,14 @@ const AdminArticlesList = () => {
 
   useEffect(() => {
     fetchArticles();
-  }, []); // Fetch articles on component mount
+  }, []);
 
   const resetForm = () => {
     setCurrentArticle({
       id: '',
       title: '',
       content: '',
-      author: { _id: '', name: '', email: '' }, // Reset author to empty object
+      author: { _id: '', name: '', email: '' },
       status: 'draft',
       category: '',
       tags: []
@@ -144,17 +143,9 @@ const AdminArticlesList = () => {
   const handleDeleteArticle = async (id: string) => {
     if (confirm('Are you sure you want to delete this article?')) {
       try {
-        const token = getToken();
-        if (!token) {
-          toast.error('Authentication token not found. Please log in as admin.');
-          return;
-        }
-
         const response = await fetch(`${API_BASE_URL}/articles/${id}`, {
           method: 'DELETE',
-          headers: {
-            'Authorization': `Bearer ${token}`,
-          },
+          credentials: 'include',
         });
 
         const data = await response.json();
@@ -174,18 +165,12 @@ const AdminArticlesList = () => {
 
   const handleReviewArticle = async (id: string, status: 'approved' | 'rejected') => {
     try {
-      const token = getToken();
-      if (!token) {
-        toast.error('Authentication token not found. Please log in as admin.');
-        return;
-      }
-
       const response = await fetch(`${API_BASE_URL}/articles/${id}/review`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`,
         },
+        credentials: 'include',
         body: JSON.stringify({ status }),
       });
 
@@ -197,7 +182,7 @@ const AdminArticlesList = () => {
         } else {
           toast.success('Article rejected');
         }
-        fetchArticles(); // Re-fetch articles to update their status in the list
+        fetchArticles();
       } else {
         toast.error(data.message || `Failed to ${status} article`);
       }
@@ -207,15 +192,34 @@ const AdminArticlesList = () => {
     }
   };
 
+  // NEW FUNCTION: Submit Article for Approval
+  const handleSubmitForApproval = async (id: string) => {
+    if (confirm('Are you sure you want to submit this article for approval?')) {
+      try {
+        const response = await fetch(`${API_BASE_URL}/articles/${id}/submit`, {
+          method: 'POST', // Use POST for submit endpoint
+          credentials: 'include',
+        });
+
+        const data = await response.json();
+
+        if (response.ok && data.success) {
+          toast.success('Article submitted for approval');
+          fetchArticles(); // Re-fetch to update status to 'pending'
+        } else {
+          toast.error(data.message || 'Failed to submit article for approval');
+        }
+      } catch (error) {
+        console.error('Error submitting article for approval:', error);
+        toast.error('Failed to submit article for approval');
+      }
+    }
+  };
+
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    const token = getToken();
-    if (!token) {
-      toast.error('Authentication token not found. Please log in.');
-      return;
-    }
-
     try {
       let response;
       let url = `${API_BASE_URL}/articles`;
@@ -226,9 +230,6 @@ const AdminArticlesList = () => {
         method = 'PUT';
       }
 
-      // When creating, the author is set by the backend from the token.
-      // So, we don't send `author` in the payload for creation.
-      // For editing, the backend handles authorization.
       const payload: any = {
         title: currentArticle.title,
         content: currentArticle.content,
@@ -236,7 +237,6 @@ const AdminArticlesList = () => {
         tags: currentArticle.tags,
       };
 
-      // Only allow admin to set status directly via this form on edit
       if (isEditing && currentUser && currentUser.role === 'admin') {
         payload.status = currentArticle.status;
       }
@@ -245,8 +245,8 @@ const AdminArticlesList = () => {
         method: method,
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`,
         },
+        credentials: 'include',
         body: JSON.stringify(payload),
       });
 
@@ -256,9 +256,9 @@ const AdminArticlesList = () => {
         if (isEditing) {
           toast.success('Article updated successfully');
         } else {
-          toast.success('Article added successfully');
+          toast.success('Article added successfully (as Draft)'); // Clarify status
         }
-        fetchArticles(); // Re-fetch articles to update the list
+        fetchArticles();
         setDialogOpen(false);
         resetForm();
       } else {
@@ -325,7 +325,7 @@ const AdminArticlesList = () => {
                     <div className="max-w-xs truncate">{article.title}</div>
                   </TableCell>
                   <TableCell>{article.category}</TableCell>
-                  <TableCell>{article.author.name}</TableCell> {/* Safely access author.name */}
+                  <TableCell>{article.author?.name || 'N/A'}</TableCell> 
                   <TableCell>{getStatusBadge(article.status)}</TableCell>
                   <TableCell>
                     <div className="flex space-x-2">
@@ -346,6 +346,19 @@ const AdminArticlesList = () => {
                         <TrashIcon className="h-4 w-4 text-red-500" />
                       </Button>
                       
+                      {/* Show Submit for Approval button if status is Draft or Rejected */}
+                      {(article.status === 'draft' || article.status === 'rejected') && (
+                        <Button 
+                          variant="ghost" 
+                          size="sm" 
+                          onClick={() => handleSubmitForApproval(article.id)}
+                          title="Submit for Approval"
+                        >
+                          <Send className="h-4 w-4 text-purple-500" />
+                        </Button>
+                      )}
+
+                      {/* Show Approve/Reject buttons if status is Pending */}
                       {article.status === 'pending' && (
                         <>
                           <Button 

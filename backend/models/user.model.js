@@ -24,13 +24,23 @@ const userSchema = new mongoose.Schema({
     enum: ['user', 'admin'],
     default: 'user'
   },
+  phone: { // ADD THIS FIELD
+    type: String,
+    trim: true,
+    default: '' // Default to empty string
+  },
+  address: { // ADD THIS FIELD
+    type: String,
+    trim: true,
+    default: '' // Default to empty string
+  },
   createdAt: {
     type: Date,
     default: Date.now
   }
 }, { timestamps: true });
 
-// Hash password before saving - Keep this UNCOMMENTED
+// Hash password before saving - Keep this UNCOMMENTED and secure
 userSchema.pre('save', async function(next) {
   if (!this.isModified('password')) return next();
   
@@ -43,13 +53,12 @@ userSchema.pre('save', async function(next) {
   }
 });
 
-// Method to compare passwords - ***TEMPORARY BYPASS FOR DEBUGGING***
-// This will always return true, effectively allowing any password to log in.
-// YOU MUST REVERT THIS AFTER TESTING!
+// Method to compare passwords - Keep this secure
 userSchema.methods.comparePassword = async function(candidatePassword) {
-  // Revert to original secure comparison
   return await bcrypt.compare(candidatePassword, this.password);
 };
-const User = mongoose.model('User', userSchema);
+
+// Check if the model already exists before compiling it (important for nodemon)
+const User = mongoose.models.User || mongoose.model('User', userSchema);
 
 module.exports = User;

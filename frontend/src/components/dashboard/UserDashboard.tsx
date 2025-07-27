@@ -1,140 +1,217 @@
-
-import React from 'react';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { useState, useEffect } from 'react';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { CalendarCheck, User as UserIcon, Clock, Mail, Phone, Loader2, RefreshCcw, Link } from 'lucide-react';
+import { toast } from 'sonner';
 import { useAuth } from '@/context/AuthContext';
-import { Link } from 'react-router-dom';
-import { 
-  User, 
-  FileText, 
-  Brain, 
-  Hospital, 
-  Calendar, 
-  Activity, 
-  Heart,
-  ChevronRight,
-  Settings
-} from 'lucide-react';
+import AppointmentForm from './AppointmentForm'; // Assuming this is the form to book new appointments
+import { format } from 'date-fns'; // For date formatting
+import { Navigate } from 'react-router-dom'; // For redirection if not logged in
+
+// Define the base URL for your backend API
+const API_BASE_URL = 'http://localhost:5000/api';
+
+// Type definition for an appointment request from the backend
+type AppointmentRequest = {
+  _id: string;
+  type: 'appointment_booking' | 'free_consultation'; // Include free_consultation type
+  status: 'pending' | 'approved' | 'rejected';
+  data: {
+    patientName?: string; // Optional for free_consultation
+    fullName?: string; // For free_consultation
+    patientEmail?: string; // Optional for free_consultation
+    email?: string; // For free_consultation
+    patientPhone?: string; // Optional for free_consultation
+    phoneNumber?: string; // For free_consultation
+    appointmentDate: string; // ISO string from backend
+    appointmentTime: string;
+    reasonForVisit?: string; // For appointment_booking
+    service?: string; // For free_consultation
+  };
+  submittedBy: string; // User ID
+  createdAt: string;
+  updatedAt: string;
+};
 
 const UserDashboard = () => {
-  const { user } = useAuth();
+  const { user, isLoading: authLoading } = useAuth();
+  const [appointments, setAppointments] = useState<AppointmentRequest[]>([]);
+  const [loadingAppointments, setLoadingAppointments] = useState(true);
 
-  // Mock data for recent activities
-  const recentActivities = [
-    { type: 'Medical Report', date: 'Today, 10:30 AM', description: 'Uploaded blood test results' },
-    { type: 'Appointment', date: 'Yesterday', description: 'Scheduled appointment with Dr. Johnson' },
-    { type: 'Mental Health', date: '3 days ago', description: 'Completed mental health assessment' }
-  ];
+  const fetchUserAppointments = async () => {
+    if (!user) {
+      setLoadingAppointments(false);
+      return;
+    }
 
-  // Quick links for user actions
-  const quickLinks = [
-    { name: 'Medical Reports', icon: FileText, path: '/diagnosis', description: 'Upload and analyze medical reports' },
-    { name: 'Mental Health', icon: Brain, path: '/mental-health', description: 'Access mental health resources' },
-    { name: 'Find Hospitals', icon: Hospital, path: '/hospitals', description: 'Locate nearby healthcare facilities' },
-    { name: 'Health Records', icon: Calendar, path: '/records', description: 'View and manage your health records' }
-  ];
+    setLoadingAppointments(true);
+    try {
+      const response = await fetch(`${API_BASE_URL}/requests/user`, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        credentials: 'include', // Crucial for httpOnly cookies
+      });
 
-  const healthStatistics = [
-    { label: 'Reports Analyzed', value: 3, icon: Activity },
-    { label: 'Appointments', value: 2, icon: Calendar },
-    { label: 'Health Score', value: '85%', icon: Heart }
-  ];
+      if (!response.ok) {
+        toast.error('Failed to load your appointments. Please log in again.');
+        setLoadingAppointments(false);
+        return;
+      }
+
+      const data = await response.json();
+
+      if (data.success) {
+        // Filter for both appointment_booking and free_consultation types
+        const userAppointments = data.data.filter(
+          (req: any) => req.type === 'appointment_booking' || req.type === 'free_consultation'
+        );
+        // Sort by date, newest first
+        userAppointments.sort((a: AppointmentRequest, b: AppointmentRequest) => 
+          new Date(b.data.appointmentDate).getTime() - new Date(a.data.appointmentDate).getTime()
+        );
+        setAppointments(userAppointments);
+      } else {
+        toast.error(data.message || 'Failed to load appointments.');
+      }
+    } catch (error) {
+      console.error('Error fetching appointments:', error);
+      toast.error('Failed to load appointments.');
+    } finally {
+      setLoadingAppointments(false);
+    }
+  };
+
+  useEffect(() => {
+    if (!authLoading && user) { // Fetch appointments once user is loaded
+      fetchUserAppointments();
+    }
+  }, [user, authLoading]); // Dependency array to re-run when user or authLoading changes
+
+  // Show loading indicator while authentication status is being determined
+  if (authLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="flex flex-col items-center">
+          <RefreshCcw className="h-8 w-8 animate-spin text-healthcare-primary" />
+          <p className="mt-4 text-lg">Loading dashboard...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Redirect if not logged in
+  if (!user) {
+    toast.error('You must be logged in to view your dashboard.');
+    return <Navigate to="/login" replace />;
+  }
 
   return (
-    <div className="space-y-6">
-      {/* User greeting */}
-      <Card className="shadow-md">
-        <CardContent className="p-6">
-          <div className="flex items-center space-x-4">
-            <div className="bg-healthcare-primary/10 p-3 rounded-full">
-              <User className="h-8 w-8 text-healthcare-primary" />
-            </div>
-            <div>
-              <h2 className="text-2xl font-bold">Welcome, {user?.name || 'User'}</h2>
-              <p className="text-gray-500">Your personal health dashboard</p>
-            </div>
-            <div className="ml-auto">
-              <Button variant="outline" size="sm" className="flex items-center gap-1">
-                <Settings className="h-4 w-4" />
-                <span>Settings</span>
-              </Button>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
+    <div className="min-h-screen bg-gradient-to-b from-white to-blue-50">
+      {/* Navigation is usually a global component, not part of individual page content */}
+      {/* <Navigation /> */} 
+      <div className="container mx-auto pt-24 px-4 pb-12">
+        <h1 className="text-3xl font-bold text-healthcare-dark mb-6">Welcome, {user.name}!</h1>
+        <p className="text-gray-600 mb-8 max-w-3xl">
+          Your personalized health dashboard. Manage your appointments and access quick tools.
+        </p>
 
-      {/* Health statistics */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        {healthStatistics.map((stat, index) => (
-          <Card key={index} className="shadow-sm hover:shadow-md transition-shadow">
-            <CardContent className="p-4 flex items-center space-x-4">
-              <div className="bg-healthcare-primary/10 p-2 rounded-full">
-                <stat.icon className="h-5 w-5 text-healthcare-primary" />
-              </div>
-              <div>
-                <p className="text-gray-500 text-sm">{stat.label}</p>
-                <p className="text-xl font-bold">{stat.value}</p>
-              </div>
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+          {/* User Info Card */}
+          <Card className="lg:col-span-1 shadow-lg">
+            <CardHeader>
+              <CardTitle className="flex items-center">
+                <UserIcon className="h-5 w-5 mr-2 text-healthcare-primary" />
+                My Info
+              </CardTitle>
+              <CardDescription>Quick overview of your profile.</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-2">
+              <p className="text-gray-700"><strong>Name:</strong> {user.name}</p>
+              <p className="text-gray-700"><strong>Email:</strong> {user.email}</p>
+              <p className="text-gray-700"><strong>Role:</strong> {user.role.charAt(0).toUpperCase() + user.role.slice(1)}</p>
+              <Button asChild variant="outline" className="w-full mt-4">
+                <Link to="/profile">Edit Profile</Link>
+              </Button>
             </CardContent>
           </Card>
-        ))}
+
+          {/* Book Appointment Form */}
+          <div className="lg:col-span-2">
+            <AppointmentForm />
+          </div>
+        </div>
+
+        {/* Recent Appointments Section */}
+        <section className="mt-12">
+          <Card className="shadow-lg">
+            <CardHeader>
+              <CardTitle className="flex items-center">
+                <CalendarCheck className="h-5 w-5 mr-2 text-healthcare-primary" />
+                My Recent Appointments
+              </CardTitle>
+              <CardDescription>A summary of your latest appointment requests.</CardDescription>
+            </CardHeader>
+            <CardContent>
+              {loadingAppointments ? (
+                <div className="flex justify-center py-8">
+                  <Loader2 className="h-8 w-8 animate-spin text-healthcare-primary" />
+                  <span className="ml-2">Loading appointments...</span>
+                </div>
+              ) : appointments.length > 0 ? (
+                <div className="space-y-4">
+                  {appointments.slice(0, 3).map((appt) => ( // Show up to 3 recent appointments
+                    <div key={appt._id} className="border rounded-lg p-4 shadow-sm bg-gray-50">
+                      <div className="flex justify-between items-center mb-2">
+                        <h3 className="font-semibold text-lg">
+                          {appt.type === 'appointment_booking' ? appt.data.reasonForVisit : `Free Consultation: ${appt.data.service}`}
+                        </h3>
+                        <span className={`px-2 py-1 rounded text-xs font-medium ${
+                          appt.status === 'approved' ? 'bg-green-100 text-green-800' :
+                          appt.status === 'pending' ? 'bg-yellow-100 text-yellow-800' :
+                          'bg-red-100 text-red-800'
+                        }`}>
+                          {appt.status.charAt(0).toUpperCase() + appt.status.slice(1)}
+                        </span>
+                      </div>
+                      <p className="text-gray-600 text-sm mb-1">
+                        <CalendarCheck className="inline-block h-4 w-4 mr-1 align-text-bottom" />
+                        Date: {format(new Date(appt.data.appointmentDate), 'PPP')} at {appt.data.appointmentTime}
+                      </p>
+                      <p className="text-gray-600 text-sm mb-1">
+                        <Phone className="inline-block h-4 w-4 mr-1 align-text-bottom" />
+                        Contact: {appt.type === 'appointment_booking' ? appt.data.patientPhone : appt.data.phoneNumber}
+                      </p>
+                      <p className="text-gray-600 text-sm">
+                        <Mail className="inline-block h-4 w-4 mr-1 align-text-bottom" />
+                        Email: {appt.type === 'appointment_booking' ? appt.data.patientEmail : appt.data.email}
+                      </p>
+                      <p className="text-gray-500 text-xs mt-2">
+                        Submitted on: {format(new Date(appt.createdAt), 'PPpp')}
+                      </p>
+                    </div>
+                  ))}
+                  {appointments.length > 3 && (
+                    <div className="text-center mt-4">
+                      <Button asChild variant="outline">
+                        <Link to="/records">View All Appointments</Link>
+                      </Button>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div className="text-center py-8 text-gray-500">
+                  <p>No recent appointments found.</p>
+                  <p className="mt-2">Book your first appointment above!</p>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </section>
+
+        {/* Other sections can go here, e.g., quick links to AI tools, etc. */}
       </div>
-
-      {/* Quick actions */}
-      <Card className="shadow-md">
-        <CardHeader>
-          <CardTitle>Quick Actions</CardTitle>
-          <CardDescription>Access key features of HealthAI</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {quickLinks.map((link, index) => (
-              <Link key={index} to={link.path}>
-                <Card className="hover:bg-gray-50 transition-colors cursor-pointer h-full">
-                  <CardContent className="p-4 flex items-center space-x-3">
-                    <div className="bg-healthcare-primary/10 p-2 rounded-full">
-                      <link.icon className="h-5 w-5 text-healthcare-primary" />
-                    </div>
-                    <div className="flex-1">
-                      <h3 className="font-medium">{link.name}</h3>
-                      <p className="text-sm text-gray-500">{link.description}</p>
-                    </div>
-                    <ChevronRight className="h-5 w-5 text-gray-400" />
-                  </CardContent>
-                </Card>
-              </Link>
-            ))}
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Recent activity */}
-      <Card className="shadow-md">
-        <CardHeader>
-          <CardTitle>Recent Activity</CardTitle>
-          <CardDescription>Your latest health-related activities</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="space-y-4">
-            {recentActivities.map((activity, index) => (
-              <div key={index} className="flex items-start space-x-3 pb-3 border-b last:border-0 last:pb-0">
-                <div className="bg-gray-100 p-2 rounded-full mt-1">
-                  {activity.type === 'Medical Report' && <FileText className="h-4 w-4 text-blue-500" />}
-                  {activity.type === 'Appointment' && <Calendar className="h-4 w-4 text-green-500" />}
-                  {activity.type === 'Mental Health' && <Brain className="h-4 w-4 text-purple-500" />}
-                </div>
-                <div className="flex-1">
-                  <div className="flex justify-between">
-                    <h4 className="font-medium">{activity.type}</h4>
-                    <span className="text-xs text-gray-500">{activity.date}</span>
-                  </div>
-                  <p className="text-sm text-gray-600">{activity.description}</p>
-                </div>
-              </div>
-            ))}
-          </div>
-        </CardContent>
-      </Card>
     </div>
   );
 };

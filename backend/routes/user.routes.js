@@ -1,16 +1,20 @@
-
 const express = require('express');
-const router = express.Router();
-const userController = require('../controllers/user.controller');
+const {
+    getUserProfile,
+    updateUserProfile, // Import this
+    getAllUsers,
+    deleteUser
+} = require('../controllers/user.controller');
 const { authenticate, isAdmin } = require('../middleware/auth.middleware');
 
-// Get all users (admin only)
-router.get('/', authenticate, isAdmin, userController.getAllUsers);
+const router = express.Router();
 
-// Get user profile
-router.get('/profile', authenticate, userController.getUserProfile);
+// User profile routes
+router.get('/profile', authenticate, getUserProfile);
+router.put('/profile', authenticate, updateUserProfile); // ADD THIS LINE for PUT request
 
-// Delete user (admin only)
-router.delete('/:id', authenticate, isAdmin, userController.deleteUser);
+// Admin user management routes
+router.get('/', authenticate, isAdmin, getAllUsers);
+router.delete('/:id', authenticate, isAdmin, deleteUser);
 
 module.exports = router;

@@ -9,12 +9,13 @@ import { useAuth } from '@/context/AuthContext'; // Import useAuth
 import { format } from "date-fns"; // For date formatting
 import { Calendar } from "@/components/ui/calendar"; // Assuming you have this component
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"; // Assuming you have this component
+import { cn } from '@/lib/utils';
 
 // Define the base URL for your backend API
 const API_BASE_URL = 'http://localhost:5000/api';
 
 const AppointmentForm = () => {
-  const { user, getToken } = useAuth(); // Get current user and getToken
+  const { user, getToken } = useAuth(); // Get current user and getToken (getToken now returns null)
   const [appointmentDate, setAppointmentDate] = useState<Date | undefined>(new Date());
   const [appointmentTime, setAppointmentTime] = useState('');
   const [reason, setReason] = useState('');
@@ -29,7 +30,7 @@ const AppointmentForm = () => {
     e.preventDefault();
     setIsLoading(true);
 
-    if (!user) {
+    if (!user) { // Ensure user is logged in
       toast.error('You must be logged in to book an appointment.');
       setIsLoading(false);
       return;
@@ -41,12 +42,13 @@ const AppointmentForm = () => {
       return;
     }
 
-    const token = getToken();
-    if (!token) {
-      toast.error('Authentication token not found. Please log in.');
-      setIsLoading(false);
-      return;
-    }
+    // No need to get token from getToken() for httpOnly cookies
+    // const token = getToken(); // REMOVE THIS LINE
+    // if (!token) { // REMOVE THIS CHECK
+    //   toast.error('Authentication token not found. Please log in.');
+    //   setIsLoading(false);
+    //   return;
+    // }
 
     try {
       const formattedDate = appointmentDate.toISOString(); // Send as ISO string for backend
@@ -55,18 +57,18 @@ const AppointmentForm = () => {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`,
+          // 'Authorization': `Bearer ${token}`, // REMOVE THIS LINE
         },
+        credentials: 'include', // CRUCIAL: Browser sends httpOnly cookie automatically
         body: JSON.stringify({
-          type: 'appointment_booking', // This is the correct type for your backend Request model
-          data: { // This 'data' object will be stored in the Request model's 'data' field
+          type: 'appointment_booking',
+          data: {
             patientName: userName,
             patientEmail: contactEmail,
             patientPhone: contactPhone,
             appointmentDate: formattedDate,
             appointmentTime: appointmentTime,
             reasonForVisit: reason,
-            // You can add more fields here like preferredDoctor, department, etc.
           },
         }),
       });
@@ -107,7 +109,7 @@ const AppointmentForm = () => {
               <Input
                 id="patientName"
                 value={userName}
-                readOnly // Name is pre-filled from logged-in user
+                readOnly
                 className="bg-gray-100 cursor-not-allowed"
               />
             </div>
@@ -158,9 +160,10 @@ const AppointmentForm = () => {
               <PopoverTrigger asChild>
                 <Button
                   variant={"outline"}
-                  className={`w-full justify-start text-left font-normal ${
+                  className={cn(
+                    "w-full justify-start text-left font-normal",
                     !appointmentDate && "text-muted-foreground"
-                  }`}
+                  )}
                 >
                   <CalendarIcon className="mr-2 h-4 w-4" />
                   {appointmentDate ? format(appointmentDate, "PPP") : <span>Pick a date</span>}

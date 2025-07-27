@@ -24,7 +24,7 @@ type Product = {
   description: string;
   price: number;
   category: string;
-  imageUrl: string; // Add imageUrl field
+  imageUrl: string;
   stock: number;
 };
 
@@ -39,33 +39,35 @@ const AdminProductsList = () => {
     description: '',
     price: 0,
     category: '',
-    imageUrl: '', // Initialize imageUrl
+    imageUrl: '',
     stock: 0
   });
-  const { getToken } = useAuth(); // Get getToken from useAuth
+  const { getToken } = useAuth(); // getToken now returns null, but we keep useAuth for context
 
   const fetchProducts = async () => {
     setLoading(true);
     try {
-      const token = getToken();
-      if (!token) {
-        toast.error('Authentication token not found. Please log in.');
-        setLoading(false);
-        return;
-      }
-
-      // Products can be fetched by anyone, not just admin, but we'll use token for consistency
+      // No need for getToken() or Authorization header for httpOnly cookies
       const response = await fetch(`${API_BASE_URL}/products`, {
         method: 'GET',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`, // Include token even for public routes if desired for tracking
         },
+        credentials: 'include', // CRUCIAL: Browser sends httpOnly cookie automatically
       });
+
+      // If 401, it means the cookie wasn't sent or was invalid.
+      // The backend will return success: false and a message.
+      if (!response.ok) {
+        // If not authenticated, redirect to login or show error
+        toast.error('Session expired or not authorized. Please log in again.');
+        setLoading(false);
+        return;
+      }
 
       const data = await response.json();
 
-      if (response.ok && data.success) {
+      if (data.success) {
         const fetchedProducts: Product[] = data.data.map((p: any) => ({
           id: p._id,
           name: p.name,
@@ -118,17 +120,10 @@ const AdminProductsList = () => {
   const handleDeleteProduct = async (id: string) => {
     if (confirm('Are you sure you want to delete this product?')) {
       try {
-        const token = getToken();
-        if (!token) {
-          toast.error('Authentication token not found. Please log in as admin.');
-          return;
-        }
-
+        // No need for getToken() or Authorization header for httpOnly cookies
         const response = await fetch(`${API_BASE_URL}/products/${id}`, {
           method: 'DELETE',
-          headers: {
-            'Authorization': `Bearer ${token}`,
-          },
+          credentials: 'include', // CRUCIAL: Browser sends httpOnly cookie automatically
         });
 
         const data = await response.json();
@@ -149,11 +144,8 @@ const AdminProductsList = () => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    const token = getToken();
-    if (!token) {
-      toast.error('Authentication token not found. Please log in as admin.');
-      return;
-    }
+    // No need for getToken() or Authorization header for httpOnly cookies
+    // The browser will send the cookie automatically if it's present and valid.
 
     try {
       let response;
@@ -169,8 +161,8 @@ const AdminProductsList = () => {
         method: method,
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`,
         },
+        credentials: 'include', // CRUCIAL: Browser sends httpOnly cookie automatically
         body: JSON.stringify(currentProduct),
       });
 

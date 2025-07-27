@@ -10,16 +10,18 @@ type User = {
   id: string;
   email: string;
   name: string;
-  role: string; // Add role to the user type
+  role: string;
+  phone?: string;
+  address?: string;
 };
 
 type AuthContextType = {
   user: User | null;
   isLoading: boolean;
-  login: (email: string, password: string) => Promise<boolean>; // Returns true on success, false on failure
-  signup: (name: string, email: string, password: string) => Promise<boolean>; // Returns true on success, false on failure
+  login: (email: string, password: string) => Promise<boolean>;
+  signup: (name: string, email: string, password: string) => Promise<boolean>;
   logout: () => void;
-  getToken: () => string | null;
+  getToken: () => string | null; // This function will now be largely symbolic or return null
 };
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -27,38 +29,38 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const navigate = useNavigate(); // Still used for logout redirect
+  const navigate = useNavigate();
 
-  const getToken = () => localStorage.getItem('token');
+  const getToken = () => null; // Token is httpOnly, cannot be read by JS
 
-  const fetchUserProfile = async (token: string) => {
+  // Function to fetch user profile using the cookie (browser sends it automatically)
+  const fetchUserProfile = async () => { // No token parameter needed
     try {
       const response = await fetch(`${API_BASE_URL}/users/profile`, {
         method: 'GET',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`,
         },
+        credentials: 'include', // IMPORTANT: Send cookies with the request
       });
 
       if (!response.ok) {
-        localStorage.removeItem('token');
-        throw new Error('Failed to fetch user profile or token expired');
+        // If server responds with 401/403 or other error, it means session is invalid
+        // No need to remove token from localStorage as it's httpOnly
+        throw new Error('Failed to fetch user profile or session expired');
       }
 
       const data = await response.json();
       if (data.success) {
-        // Ensure the user object has a role, default to 'user' if missing
         const fetchedUser: User = { ...data.data, role: data.data.role || 'user' };
         setUser(fetchedUser);
         return fetchedUser;
       } else {
-        localStorage.removeItem('token');
+        setUser(null); // Clear user if backend says not successful
         throw new Error(data.message || 'Failed to fetch user profile');
       }
     } catch (error) {
       console.error('Error fetching user profile:', error);
-      localStorage.removeItem('token');
       setUser(null);
       return null;
     }
@@ -68,10 +70,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     let isMounted = true;
 
     const loadUser = async () => {
-      const token = getToken();
-      if (token) {
-        await fetchUserProfile(token);
-      }
+      // On initial load, try to fetch user profile. If successful, user is logged in via cookie.
+      await fetchUserProfile();
       if (isMounted) {
         setIsLoading(false);
       }
@@ -92,13 +92,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({ email, password }),
+        credentials: 'include', // IMPORTANT: Receive cookie from response
       });
 
       const data = await response.json();
 
       if (response.ok && data.success) {
-        localStorage.setItem('token', data.token);
-        // Ensure the user object has a role, default to 'user' if missing
+        // Token is now set as httpOnly cookie by backend. No localStorage.setItem('token').
         const loggedInUser: User = { ...data.user, role: data.user.role || 'user' };
         setUser(loggedInUser);
         toast.success('Successfully logged in');
@@ -125,13 +125,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({ name, email, password }),
+        credentials: 'include', // IMPORTANT: Receive cookie from response
       });
 
       const data = await response.json();
 
       if (response.ok && data.success) {
-        localStorage.setItem('token', data.token);
-        // Ensure the user object has a role, default to 'user' if missing
+        // Token is now set as httpOnly cookie by backend. No localStorage.setItem('token').
         const registeredUser: User = { ...data.user, role: data.user.role || 'user' };
         setUser(registeredUser);
         toast.success('Account created successfully');
@@ -149,12 +149,25 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
-  const logout = () => {
-    setUser(null);
-    localStorage.removeItem('token');
-    localStorage.removeItem('adminSession'); // Also clear admin session if it exists
-    toast.info('You have been logged out');
-    navigate('/'); // Logout still navigates to home
+  const logout = async () => { // Make logout async to await backend call
+    try {
+      const response = await fetch(`${API_BASE_URL}/auth/logout`, {
+        method: 'GET', // Or POST, depends on your backend route
+        credentials: 'include', // IMPORTANT: Send cookie to backend to clear it
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to log out on server.');
+      }
+      
+      setUser(null);
+      localStorage.removeItem('adminSession'); // Clear admin session
+      toast.info('You have been logged out');
+      navigate('/');
+    } catch (error: any) {
+      console.error('Error during logout:', error);
+      toast.error(error.message || 'Failed to log out.');
+    }
   };
 
   return (
@@ -171,4 +184,3 @@ export const useAuth = () => {
   }
   return context;
 };
-

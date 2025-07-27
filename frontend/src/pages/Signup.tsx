@@ -6,7 +6,7 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { UserPlus } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import Navigation from '@/components/Navigation';
-import { toast } from 'sonner'; // Ensure toast is imported
+import { toast } from 'sonner';
 
 const Signup = () => {
   const [name, setName] = useState('');
@@ -14,7 +14,7 @@ const Signup = () => {
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [passwordError, setPasswordError] = useState('');
-  const { signup, isLoading: authContextLoading, user } = useAuth(); // Get signup, isLoading, and user
+  const { signup, isLoading: authContextLoading, user } = useAuth();
   const navigate = useNavigate();
 
   const isMounted = useRef(true);
@@ -34,11 +34,20 @@ const Signup = () => {
 
     if (user) { // If a user object exists (meaning they are logged in)
       if (isMounted.current) {
-        // After successful signup, always redirect to profile
-        navigate('/profile', { replace: true });
+        if (user.role === 'admin') {
+          localStorage.setItem('adminSession', JSON.stringify({
+            isAdmin: true,
+            email: user.email,
+            timestamp: new Date().getTime()
+          }));
+          navigate('/admin/dashboard', { replace: true });
+        } else if (user.role === 'user') {
+          // For regular users, redirect to general dashboard
+          navigate('/dashboard', { replace: true }); // CHANGED FROM /profile TO /dashboard
+        }
       }
     }
-  }, [user, navigate, authContextLoading]); // Depend on user, navigate, and authContextLoading
+  }, [user, navigate, authContextLoading]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -50,10 +59,7 @@ const Signup = () => {
     }
     
     setPasswordError('');
-    // Call AuthContext's signup function. It returns true/false for success.
-    // Redirection is handled by the useEffect above, which reacts to `user` state changes.
     await signup(name, email, password);
-    // No explicit navigation here, as useEffect will handle it.
   };
 
   return (
@@ -70,7 +76,7 @@ const Signup = () => {
           <form onSubmit={handleSubmit}>
             <CardContent className="space-y-4">
               <div className="space-y-2">
-                <label htmlFor="name" className="text-sm font-medium">Full Name</label>
+                <label htmlFor="name">Full Name</label>
                 <Input
                   id="name"
                   placeholder="John Doe"
@@ -80,7 +86,7 @@ const Signup = () => {
                 />
               </div>
               <div className="space-y-2">
-                <label htmlFor="email" className="text-sm font-medium">Email</label>
+                <label htmlFor="email">Email</label>
                 <Input
                   id="email"
                   type="email"
@@ -91,7 +97,7 @@ const Signup = () => {
                 />
               </div>
               <div className="space-y-2">
-                <label htmlFor="password" className="text-sm font-medium">Password</label>
+                <label htmlFor="password">Password</label>
                 <Input
                   id="password"
                   type="password"
@@ -102,7 +108,7 @@ const Signup = () => {
                 />
               </div>
               <div className="space-y-2">
-                <label htmlFor="confirm-password" className="text-sm font-medium">Confirm Password</label>
+                <label htmlFor="confirm-password">Confirm Password</label>
                 <Input
                   id="confirm-password"
                   type="password"

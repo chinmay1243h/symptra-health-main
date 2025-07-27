@@ -2,10 +2,11 @@ import { useState, useEffect } from 'react';
 import Navigation from "@/components/Navigation";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { CalendarCheck, FileText, Loader2, RefreshCcw } from 'lucide-react';
+import { CalendarCheck, FileText, Loader2, Mail, Phone, RefreshCcw } from 'lucide-react';
 import { toast } from 'sonner';
 import { useAuth } from '@/context/AuthContext'; // Import useAuth
 import { format } from 'date-fns'; // For formatting dates
+import { Navigate } from 'react-router-dom'; // For redirection if not logged in
 
 // Define the base URL for your backend API
 const API_BASE_URL = 'http://localhost:5000/api';
@@ -13,15 +14,19 @@ const API_BASE_URL = 'http://localhost:5000/api';
 // Type definition for an appointment request from the backend
 type AppointmentRequest = {
   _id: string;
-  type: 'appointment_booking';
+  type: 'appointment_booking' | 'free_consultation'; // Include free_consultation type
   status: 'pending' | 'approved' | 'rejected';
   data: {
-    patientName: string;
-    patientEmail: string;
-    patientPhone: string;
+    patientName?: string; // Optional for free_consultation
+    fullName?: string; // For free_consultation
+    patientEmail?: string; // Optional for free_consultation
+    email?: string; // For free_consultation
+    patientPhone?: string; // Optional for free_consultation
+    phoneNumber?: string; // For free_consultation
     appointmentDate: string; // ISO string from backend
     appointmentTime: string;
-    reasonForVisit: string;
+    reasonForVisit?: string; // For appointment_booking
+    service?: string; // For free_consultation
   };
   submittedBy: string; // User ID
   createdAt: string;
@@ -36,39 +41,41 @@ const Records = () => {
   const [loadingMedicalReports, setLoadingMedicalReports] = useState(false); // Placeholder loading state
 
   const fetchAppointments = async () => {
-    if (!user || !getToken()) {
-      // If not logged in, or token not available, don't fetch
+    if (!user) { // If not logged in, don't fetch
       setLoadingAppointments(false);
       return;
     }
 
     setLoadingAppointments(true);
     try {
-      const token = getToken();
-      if (!token) {
-        toast.error('Authentication token not found. Please log in.');
+      // No need for getToken() or Authorization header for httpOnly cookies
+      const response = await fetch(`${API_BASE_URL}/requests/user`, { // This endpoint fetches requests for the current user
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        credentials: 'include', // CRUCIAL: Browser sends httpOnly cookie automatically
+      });
+
+      if (!response.ok) {
+        // If 401, it means the cookie wasn't sent or was invalid.
+        // The backend will return success: false and a message.
+        toast.error('Failed to load your appointments. Please log in again.');
         setLoadingAppointments(false);
         return;
       }
 
-      // Fetch all requests for the logged-in user
-      // Note: Your backend's request.controller.js might need a route to get requests by submittedBy
-      // For now, we'll assume /api/requests/user will fetch requests for the current user.
-      // If not, you might need to fetch all requests (admin only) and filter on frontend,
-      // or add a new backend route for user-specific requests.
-      const response = await fetch(`${API_BASE_URL}/requests/user`, { // Assuming this endpoint exists
-        method: 'GET',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`,
-        },
-      });
-
       const data = await response.json();
 
-      if (response.ok && data.success) {
-        // Filter for 'appointment_booking' type
-        const userAppointments = data.data.filter((req: any) => req.type === 'appointment_booking');
+      if (data.success) {
+        // Filter for both 'appointment_booking' and 'free_consultation' types
+        const userAppointments = data.data.filter(
+          (req: any) => req.type === 'appointment_booking' || req.type === 'free_consultation'
+        );
+        // Sort by date, newest first
+        userAppointments.sort((a: AppointmentRequest, b: AppointmentRequest) => 
+          new Date(b.data.appointmentDate).getTime() - new Date(a.data.appointmentDate).getTime()
+        );
         setAppointments(userAppointments);
       } else {
         toast.error(data.message || 'Failed to load appointments.');
@@ -83,10 +90,13 @@ const Records = () => {
 
   useEffect(() => {
     // Only fetch appointments once user and token status is resolved
+    // Added user.id to dependencies to trigger re-fetch if user object itself changes (e.g., after login)
     if (!authLoading && user) {
       fetchAppointments();
+    } else if (!authLoading && !user) { // If auth finished loading and no user, stop loading appointments
+        setLoadingAppointments(false);
     }
-  }, [user, authLoading]); // Re-fetch when user or authLoading changes
+  }, [user, authLoading, user?.id]); // Re-fetch when user object (or its ID) or authLoading changes
 
   // Placeholder for fetching medical reports (future integration)
   const fetchMedicalReports = async () => {
@@ -114,7 +124,7 @@ const Records = () => {
   }
 
   // Redirect if not logged in
-  if (!user) {
+  if (!user && !authLoading) { // Only redirect if not loading and user is null
     toast.error('You must be logged in to view your records.');
     return <Navigate to="/login" replace />;
   }
@@ -157,7 +167,9 @@ const Records = () => {
                     {appointments.map((appt) => (
                       <div key={appt._id} className="border rounded-lg p-4 shadow-sm">
                         <div className="flex justify-between items-center mb-2">
-                          <h3 className="font-semibold text-lg">{appt.data.reasonForVisit}</h3>
+                          <h3 className="font-semibold text-lg">
+                            {appt.type === 'appointment_booking' ? appt.data.reasonForVisit : `Free Consultation: ${appt.data.service}`}
+                          </h3>
                           <span className={`px-2 py-1 rounded text-xs font-medium ${
                             appt.status === 'approved' ? 'bg-green-100 text-green-800' :
                             appt.status === 'pending' ? 'bg-yellow-100 text-yellow-800' :
@@ -172,11 +184,11 @@ const Records = () => {
                         </p>
                         <p className="text-gray-600 text-sm mb-1">
                           <Phone className="inline-block h-4 w-4 mr-1 align-text-bottom" />
-                          Contact: {appt.data.patientPhone}
+                          Contact: {appt.type === 'appointment_booking' ? appt.data.patientPhone : appt.data.phoneNumber}
                         </p>
                         <p className="text-gray-600 text-sm">
                           <Mail className="inline-block h-4 w-4 mr-1 align-text-bottom" />
-                          Email: {appt.data.patientEmail}
+                          Email: {appt.type === 'appointment_booking' ? appt.data.patientEmail : appt.data.email}
                         </p>
                         <p className="text-gray-500 text-xs mt-2">
                           Submitted on: {format(new Date(appt.createdAt), 'PPpp')}
